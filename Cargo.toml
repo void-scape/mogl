@@ -1,0 +1,11 @@
+[package]
+name = "mogl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+glazer = { path = "../blaze/crates/glazer", default-features = false, features = [
+	"opengl",
+] }
+glam = "0.30"
+tobj = "4.0"

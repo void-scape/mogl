@@ -1,0 +1,3 @@
+- suzanne.obj: https://github.com/alecjacobson/common-3d-test-models
+- stanford-bunny.obj: https://github.com/alecjacobson/common-3d-test-models
+- xyzrgb-dragon.obj: https://github.com/alecjacobson/common-3d-test-models
