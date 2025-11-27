@@ -7,17 +7,12 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [features]
+default = ["glazer/hot-reload"]
 model = []
 
 [dependencies]
-glam = "0.30"
-tobj = "4.0"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-glazer = { path = "../blaze/crates/glazer" }
-
-[target.'cfg(target_os = "macos")'.dependencies]
 glazer = { path = "../blaze/crates/glazer", default-features = false, features = [
 	"opengl",
-	"hot-reload",
 ] }
+glam = "0.30"
+tobj = "4.0"

@@ -24,10 +24,14 @@ pub fn report_errors() {
 pub fn default_handle_input<Memory>(
     glazer::PlatformInput { input, .. }: glazer::PlatformInput<Memory>,
 ) {
+    use glazer::winit;
     if matches!(
         input,
-        glazer::Input::Key {
-            code: glazer::KeyCode::Escape,
+        winit::event::WindowEvent::KeyboardInput {
+            event: winit::event::KeyEvent {
+                physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),
+                ..
+            },
             ..
         }
     ) {

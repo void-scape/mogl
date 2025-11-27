@@ -9,4 +9,3 @@ fn main() {
         glazer::debug_target(),
     );
 }
-

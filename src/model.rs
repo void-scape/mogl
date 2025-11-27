@@ -18,7 +18,7 @@ pub fn handle_input(platform_input: glazer::PlatformInput<Memory>) {
 
 #[unsafe(no_mangle)]
 pub fn update_and_render(
-    glazer::PlatformUpdateGL { memory, delta, .. }: glazer::PlatformUpdateGL<Memory>,
+    glazer::PlatformUpdate { memory, delta, .. }: glazer::PlatformUpdate<Memory>,
 ) {
     if !memory.startup {
         memory.startup = true;
