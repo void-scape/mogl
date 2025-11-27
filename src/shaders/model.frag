@@ -1,6 +1,3 @@
-#version 300 es
-precision mediump float;
-
 uniform float ambient_brightness;
 uniform vec3 light_source;
 uniform vec3 camera_position;

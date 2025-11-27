@@ -12,6 +12,26 @@ pub fn uniform<F: FnOnce(Option<&glow::UniformLocation>)>(
     }
 }
 
+#[macro_export]
+macro_rules! compile_shader {
+    ($gl:ident, $vert:literal, $frag:literal) => {
+        $crate::shader::compile_shader(
+            $gl,
+            #[cfg(not(target_arch = "wasm32"))]
+            concat!("#version 330 core\n", include_str!($vert),),
+            #[cfg(target_arch = "wasm32")]
+            concat!("#version 300 es\n", include_str!($vert),),
+            #[cfg(not(target_arch = "wasm32"))]
+            concat!("#version 330 core\n", include_str!($frag),),
+            #[cfg(target_arch = "wasm32")]
+            concat!(
+                "#version 300 es\nprecision mediump float;\n",
+                include_str!($frag),
+            ),
+        )
+    };
+}
+
 // https://learnopengl.com/Getting-started/Shaders
 pub fn compile_shader(gl: &glow::Context, vertex: &str, fragment: &str) -> glow::Program {
     unsafe {

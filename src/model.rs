@@ -1,4 +1,4 @@
-use crate::shader::{compile_shader, uniform};
+use crate::shader::uniform;
 use crate::{HEIGHT, WIDTH};
 use glam::{Mat4, Quat, Vec3};
 use glazer::glow::{self, HasContext};
@@ -55,11 +55,7 @@ pub fn shader(gl: &glow::Context) -> glow::Program {
         gl.enable(glow::DEPTH_TEST);
         gl.depth_func(glow::LESS);
 
-        let shader = compile_shader(
-            gl,
-            include_str!("shaders/model.vert"),
-            include_str!("shaders/model.frag"),
-        );
+        let shader = crate::compile_shader!(gl, "shaders/model.vert", "shaders/model.frag");
         gl.use_program(Some(shader));
         uniform(gl, shader, "proj_matrix", |location| {
             let proj_matrix = Mat4::perspective_rh_gl(
