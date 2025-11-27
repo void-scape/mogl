@@ -1,81 +1,51 @@
-use glazer::gl;
-use std::{ffi::CStr, io::Write};
+use glazer::glow::{self, HasContext};
 
-pub type Shader = u32;
-pub type UniformLocation = i32;
-
-#[macro_export]
-macro_rules! compile_shader {
-    ($vertex:literal, $fragment:literal) => {
-        $crate::shader::compile_shader(
-            concat!(include_str!($vertex), '\0'),
-            concat!(include_str!($fragment), '\0'),
-        )
-    };
-}
-
-pub fn with_shader<F: FnOnce()>(shader: Shader, f: F) {
-    unsafe { gl::UseProgram(shader) };
-    f()
-}
-
-pub fn uniform<F: FnOnce(UniformLocation)>(shader: Shader, uniform_ident: &CStr, f: F) {
-    f(unsafe { gl::GetUniformLocation(shader, uniform_ident.as_ptr()) })
+pub fn uniform<F: FnOnce(Option<&glow::UniformLocation>)>(
+    gl: &glow::Context,
+    program: glow::Program,
+    uniform_ident: &str,
+    f: F,
+) {
+    unsafe {
+        let location = gl.get_uniform_location(program, uniform_ident).unwrap();
+        f(Some(&location))
+    }
 }
 
 // https://learnopengl.com/Getting-started/Shaders
-pub fn compile_shader(vertex: &str, fragment: &str) -> Shader {
+pub fn compile_shader(gl: &glow::Context, vertex: &str, fragment: &str) -> glow::Program {
     unsafe {
-        let shaders = [vertex, fragment];
-        let vert = gl::CreateShader(gl::VERTEX_SHADER);
-        let frag = gl::CreateShader(gl::FRAGMENT_SHADER);
-        gl::ShaderSource(vert, 1, shaders.as_ptr().cast(), core::ptr::null());
-        gl::ShaderSource(frag, 1, shaders.as_ptr().add(1).cast(), core::ptr::null());
+        let vert = gl.create_shader(glow::VERTEX_SHADER).unwrap();
+        let frag = gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
+        gl.shader_source(vert, vertex);
+        gl.shader_source(frag, fragment);
 
-        gl::CompileShader(vert);
-        let mut success = 0;
-        gl::GetShaderiv(vert, gl::COMPILE_STATUS, &mut success);
-        if success == 0 {
-            let mut buf = [0; 512];
-            gl::GetShaderInfoLog(vert, 512, core::ptr::null_mut(), buf.as_mut_ptr().cast());
-            let end = buf.iter().position(|c| *c == 0).unwrap_or(511);
-            println!("[ERROR] failed to compile vertex shader: ");
-            _ = std::io::stdout().lock().write(&buf[..end]);
-            println!();
+        gl.compile_shader(vert);
+        if !gl.get_shader_compile_status(vert) {
+            let err = gl.get_shader_info_log(vert);
+            glazer::log!("[ERROR] failed to compile vertex shader: {err}");
             std::process::exit(1);
         }
 
-        gl::CompileShader(frag);
-        let mut success = 0;
-        gl::GetShaderiv(frag, gl::COMPILE_STATUS, &mut success);
-        if success == 0 {
-            let mut buf = [0; 512];
-            gl::GetShaderInfoLog(frag, 512, core::ptr::null_mut(), buf.as_mut_ptr().cast());
-            let end = buf.iter().position(|c| *c == 0).unwrap_or(511);
-            println!("[ERROR] failed to compile fragment shader: ");
-            _ = std::io::stdout().lock().write(&buf[..end]);
-            println!();
+        gl.compile_shader(frag);
+        if !gl.get_shader_compile_status(frag) {
+            let err = gl.get_shader_info_log(frag);
+            glazer::log!("[ERROR] failed to compile fragment shader: {err}");
             std::process::exit(1);
         }
 
-        let shader = gl::CreateProgram();
-        gl::AttachShader(shader, vert);
-        gl::AttachShader(shader, frag);
-        gl::LinkProgram(shader);
-        let mut success = 0;
-        gl::GetProgramiv(shader, gl::LINK_STATUS, &mut success);
-        if success == 0 {
-            let mut buf = [0; 512];
-            gl::GetProgramInfoLog(shader, 512, core::ptr::null_mut(), buf.as_mut_ptr().cast());
-            let end = buf.iter().position(|c| *c == 0).unwrap_or(511);
-            println!("[ERROR] failed to link shaders: ");
-            _ = std::io::stdout().lock().write(&buf[..end]);
-            println!();
+        let shader = gl.create_program().unwrap();
+        gl.attach_shader(shader, vert);
+        gl.attach_shader(shader, frag);
+        gl.link_program(shader);
+        if !gl.get_program_link_status(shader) {
+            let err = gl.get_program_info_log(shader);
+            glazer::log!("[ERROR] failed to compile fragment shader: {err}");
             std::process::exit(1);
         }
 
-        gl::DeleteShader(vert);
-        gl::DeleteShader(frag);
+        gl.delete_shader(vert);
+        gl.delete_shader(frag);
 
         shader
     }

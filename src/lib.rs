@@ -1,4 +1,4 @@
-use glazer::gl;
+use glazer::glow::{self, HasContext};
 
 #[cfg_attr(not(feature = "model"), allow(unused))]
 mod model;
@@ -10,11 +10,11 @@ pub use model::{Memory, handle_input, update_and_render};
 pub const WIDTH: usize = 1280;
 pub const HEIGHT: usize = 720;
 
-pub fn report_errors() {
+pub fn report_errors(gl: &glow::Context) {
     loop {
-        let error = unsafe { gl::GetError() };
-        if error != gl::NO_ERROR {
-            println!("[ERROR] OpenGL error code: {}", error);
+        let error = unsafe { gl.get_error() };
+        if error != glow::NO_ERROR {
+            glazer::log!("[ERROR] OpenGL error code: {}", error);
         } else {
             break;
         }
@@ -37,9 +37,4 @@ pub fn default_handle_input<Memory>(
     ) {
         std::process::exit(0);
     }
-}
-
-#[unsafe(no_mangle)]
-pub fn initialize_opengl(loader: &dyn Fn(&'static str) -> *const core::ffi::c_void) {
-    gl::load_with(loader);
 }

@@ -1,13 +1,14 @@
-use crate::shader::{Shader, uniform, with_shader};
-use crate::{HEIGHT, WIDTH, compile_shader};
+use crate::shader::{compile_shader, uniform};
+use crate::{HEIGHT, WIDTH};
 use glam::{Mat4, Quat, Vec3};
-use glazer::gl;
+use glazer::glow::{self, HasContext};
+use std::io::BufReader;
 
 #[derive(Default)]
 pub struct Memory {
     startup: bool,
-    model_shader: u32,
-    model: Model,
+    model_shader: Option<glow::Program>,
+    model: Option<Model>,
     x: f32,
 }
 
@@ -18,12 +19,17 @@ pub fn handle_input(platform_input: glazer::PlatformInput<Memory>) {
 
 #[unsafe(no_mangle)]
 pub fn update_and_render(
-    glazer::PlatformUpdate { memory, delta, .. }: glazer::PlatformUpdate<Memory>,
+    glazer::PlatformUpdate {
+        memory, delta, gl, ..
+    }: glazer::PlatformUpdate<Memory>,
 ) {
     if !memory.startup {
         memory.startup = true;
-        memory.model_shader = shader();
-        memory.model = Model::from_obj("assets/xyzrgb-dragon.obj");
+        memory.model_shader = Some(shader(gl));
+        memory.model = Some(Model::from_obj(
+            gl,
+            include_bytes!("../assets/xyzrgb-dragon.obj").as_slice(),
+        ));
     }
 
     memory.x += delta * 0.2;
@@ -34,105 +40,85 @@ pub fn update_and_render(
     );
 
     unsafe {
-        gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-
-        memory
-            .model
-            .render(memory.model_shader, Vec3::ZERO, model_matrix);
-
-        crate::report_errors();
+        gl.clear_color(0.1, 0.1, 0.1, 1.0);
+        gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+        if let (Some(model), Some(shader)) = (&memory.model, memory.model_shader) {
+            model.render(gl, shader, Vec3::ZERO, model_matrix);
+        }
+        crate::report_errors(gl);
     }
 }
 
-pub fn shader() -> Shader {
+pub fn shader(gl: &glow::Context) -> glow::Program {
     // TODO: Should this be explicit? Will this be a problem for other shaders?
     unsafe {
-        gl::Enable(gl::DEPTH_TEST);
-        gl::DepthFunc(gl::LESS);
-    }
+        gl.enable(glow::DEPTH_TEST);
+        gl.depth_func(glow::LESS);
 
-    let shader = compile_shader!("shaders/model.vert", "shaders/model.frag");
-    with_shader(shader, || {
-        uniform(shader, c"proj_matrix", |location| {
+        let shader = compile_shader(
+            gl,
+            include_str!("shaders/model.vert"),
+            include_str!("shaders/model.frag"),
+        );
+        gl.use_program(Some(shader));
+        uniform(gl, shader, "proj_matrix", |location| {
             let proj_matrix = Mat4::perspective_rh_gl(
                 90f32.to_radians(),
                 WIDTH as f32 / HEIGHT as f32,
                 1.0,
                 1_000.0,
             );
-            unsafe {
-                gl::UniformMatrix4fv(
-                    location,
-                    1,
-                    gl::FALSE,
-                    core::ptr::from_ref(&proj_matrix).cast(),
-                );
-            }
+            gl.uniform_matrix_4_f32_slice(location, false, &proj_matrix.to_cols_array());
         });
 
-        uniform(shader, c"light_source", |location| unsafe {
-            gl::Uniform3f(location, 10.0, 10.0, 5.0);
+        uniform(gl, shader, "light_source", |location| {
+            gl.uniform_3_f32(location, 10.0, 10.0, 5.0);
         });
 
-        uniform(shader, c"ambient_brightness", |location| unsafe {
-            gl::Uniform1f(location, 0.05);
+        uniform(gl, shader, "ambient_brightness", |location| {
+            gl.uniform_1_f32(location, 0.05);
         });
-    });
-    shader
+
+        shader
+    }
 }
 
-#[derive(Default)]
 pub struct Model {
-    vao: u32,
-    _vbo: u32,
-    _ebo: u32,
+    vao: glow::VertexArray,
+    _vbo: glow::Buffer,
+    _ebo: glow::Buffer,
     indices: i32,
 }
 
 impl Model {
     // https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/5.1.transformations/transformations.cpp
-    pub fn from_obj(path: &str) -> Self {
+    pub fn from_obj(gl: &glow::Context, bytes: &[u8]) -> Self {
         unsafe {
-            let (vertices, indices) = load_obj(path);
-            let mut vao = 0;
-            let mut vbo = 0;
-            let mut ebo = 0;
-            gl::GenVertexArrays(1, &mut vao);
-            gl::GenBuffers(1, &mut vbo);
-            gl::GenBuffers(1, &mut ebo);
+            let (vertices, indices) = load_obj(bytes);
 
-            gl::BindVertexArray(vao);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                vertices.len() as isize * 4,
-                vertices.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                indices.len() as isize * 4,
-                indices.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
+            let vao = gl.create_vertex_array().unwrap();
+            let vbo = gl.create_buffer().unwrap();
+            let ebo = gl.create_buffer().unwrap();
+
+            gl.bind_vertex_array(Some(vao));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+            let data =
+                core::slice::from_raw_parts(vertices.as_ptr() as *const u8, vertices.len() * 4);
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, data, glow::STATIC_DRAW);
+
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
+            let data =
+                core::slice::from_raw_parts(indices.as_ptr() as *const u8, indices.len() * 4);
+            gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, data, glow::STATIC_DRAW);
 
             let stride = 6 * 4;
-            gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride, core::ptr::null_mut());
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                ((3 * 4) as *const u8).cast(),
-            );
-            gl::EnableVertexAttribArray(1);
+            gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, stride, 0);
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(1, 3, glow::FLOAT, false, stride, 3 * 4);
+            gl.enable_vertex_attrib_array(1);
 
-            gl::BindVertexArray(0);
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl.bind_vertex_array(None);
+            gl.bind_buffer(glow::ARRAY_BUFFER, None);
 
             Self {
                 vao,
@@ -143,10 +129,17 @@ impl Model {
         }
     }
 
-    pub fn render(&self, shader: Shader, camera_position: Vec3, model_matrix: Mat4) {
-        with_shader(shader, || {
-            uniform(shader, c"camera_position", |location| unsafe {
-                gl::Uniform3f(
+    pub fn render(
+        &self,
+        gl: &glow::Context,
+        shader: glow::Program,
+        camera_position: Vec3,
+        model_matrix: Mat4,
+    ) {
+        unsafe {
+            gl.use_program(Some(shader));
+            uniform(gl, shader, "camera_position", |location| {
+                gl.uniform_3_f32(
                     location,
                     camera_position.x,
                     camera_position.y,
@@ -154,36 +147,25 @@ impl Model {
                 );
             });
 
-            uniform(shader, c"model_matrix", |location| unsafe {
-                gl::UniformMatrix4fv(
-                    location,
-                    1,
-                    gl::FALSE,
-                    core::ptr::from_ref(&model_matrix).cast(),
-                );
+            uniform(gl, shader, "model_matrix", |location| {
+                gl.uniform_matrix_4_f32_slice(location, false, &model_matrix.to_cols_array());
             });
 
-            unsafe {
-                gl::BindVertexArray(self.vao);
-                gl::DrawElements(
-                    gl::TRIANGLES,
-                    self.indices,
-                    gl::UNSIGNED_INT,
-                    core::ptr::null(),
-                );
-            }
-        });
+            gl.bind_vertex_array(Some(self.vao));
+            gl.draw_elements(glow::TRIANGLES, self.indices, glow::UNSIGNED_INT, 0);
+        }
     }
 }
 
-fn load_obj(path: &str) -> (Vec<f32>, Vec<u32>) {
-    let (models, _materials) = tobj::load_obj(
-        path,
+fn load_obj(bytes: &[u8]) -> (Vec<f32>, Vec<u32>) {
+    let (models, _materials) = tobj::load_obj_buf(
+        &mut BufReader::new(bytes),
         &tobj::LoadOptions {
             single_index: true,
             triangulate: true,
             ..Default::default()
         },
+        |_| Err(tobj::LoadError::OpenFileFailed),
     )
     .unwrap();
     let mut vertices = Vec::new();

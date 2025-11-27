@@ -1,4 +1,5 @@
-#version 330 core
+#version 300 es
+precision mediump float;
 
 uniform float ambient_brightness;
 uniform vec3 light_source;
@@ -25,7 +26,7 @@ void main() {
 	// specular
 	vec3 view_dir = normalize(camera_position - frag_position);
 	vec3 reflect_dir = reflect(-light_dir, norm); 
-	float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32);
+	float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 	vec3 specular = specular_strength * spec * light_color;  
 
 	vec3 result = (ambient_brightness + diffuse + specular) * color;
