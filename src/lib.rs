@@ -1,11 +1,9 @@
 use glazer::glow::{self, HasContext};
 
-#[cfg_attr(not(feature = "model"), allow(unused))]
+pub use model::{Memory, handle_input, update_and_render};
+
 mod model;
 mod shader;
-
-#[cfg(feature = "model")]
-pub use model::{Memory, handle_input, update_and_render};
 
 pub const WIDTH: usize = 1280;
 pub const HEIGHT: usize = 720;
@@ -27,13 +25,13 @@ pub fn default_handle_input<Memory>(
     use glazer::winit;
     if matches!(
         input,
-        winit::event::WindowEvent::KeyboardInput {
+        glazer::Input::Window(winit::event::WindowEvent::KeyboardInput {
             event: winit::event::KeyEvent {
                 physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),
                 ..
             },
             ..
-        }
+        })
     ) {
         std::process::exit(0);
     }
